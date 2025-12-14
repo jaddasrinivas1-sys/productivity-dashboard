@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>Productivity Dashboard</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <style>
+    :root{--bg:#f6f9fc;--card:#ffffff;--accent:#0ea5e9;--muted:#64748b}
+    *{box-sizing:border-box;font-family:Inter,system-ui,Arial,Helvetica,sans-serif}
+    body{margin:0;background:linear-gradient(180deg,#eef7fb,#f6fbff);color:#0f1724}
+    .wrap{max-width:980px;margin:28px auto;padding:18px}
+    header{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+    .card{background:var(--card);border-radius:10px;padding:14px;box-shadow:0 6px 18px rgba(12, 29, 49, 0.06)}
+    .grid{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+    input[type="text"],textarea,select{padding:8px;border-radius:8px;border:1px solid #e6eef8;width:100%;font-size:14px}
+    button{background:var(--accent);color:white;border:none;padding:8px 10px;border-radius:8px;cursor:pointer}
+    .task{display:flex;align-items:flex-start;gap:10px;padding:10px;border-bottom:1px solid #f1f5f9}
+    .task .title{font-weight:600}
+    .task.done .title{text-decoration:line-through;color:#94a3b8}
+    .small{font-size:13px;color:var(--muted)}
+    .controls{display:flex;gap:8px;align-items:center}
+    @media(max-width:800px){.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Productivity Dashboard</h1>
+      <div class="small">Data saved locally in your browser (localStorage)</div>
+    </header>
+
+    <div class="grid">
+      <section class="card" id="tasksCard">
+        <h3>Tasks</h3>
+        <form id="taskForm" style="margin-bottom:10px">
+          <div style="display:flex;gap:8px">
+            <input id="taskTitle" type="text" placeholder="Task title" required>
+            <select id="taskPriority" style="width:140px">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+            <button type="submit">Add</button>
+          </div>
+          <div style="margin-top:8px">
+            <textarea id="taskNotes" placeholder="Optional notes" rows="2"></textarea>
+          </div>
+        </form>
+
+        <div id="tasksList"></div>
+
+        <div class="controls" style="margin-top:8px">
+          <button id="clearAll">Clear All</button>
+          <div class="small" style="margin-left:auto">Items: <span id="count">0</span></div>
+        </div>
+      </section>
+
+      <aside class="card" id="notesCard">
+        <h3>Quick Notes</h3>
+        <textarea id="quickNotes" rows="12" placeholder="Write anything here..."></textarea>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button id="saveNotes">Save Notes</button>
+          <button id="clearNotes" style="background:#ef4444">Clear Notes</button>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+(() => {
+  const LS_TASKS = 'pd_tasks_v1';
+  const LS_NOTES = 'pd_notes_v1';
+  const taskForm = document.getElementById('taskForm');
+  const tasksList = document.getElementById('tasksList');
+  const taskTitle = document.getElementById('taskTitle');
+  const taskNotes = document.getElementById('taskNotes');
+  const taskPriority = document.getElementById('taskPriority');
+  const countEl = document.getElementById('count');
+  const clearAllBtn = document.getElementById('clearAll');
+  const quickNotes = document.getElementById('quickNotes');
+  const saveNotesBtn = document.getElementById('saveNotes');
+  const clearNotesBtn = document.getElementById('clearNotes');
+
+  function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+  function loadTasks(){ try { return JSON.parse(localStorage.getItem(LS_TASKS) || '[]'); } catch(e){ return []; } }
+  function saveTasks(arr){ localStorage.setItem(LS_TASKS, JSON.stringify(arr)); renderTasks(); }
+  function loadNotes(){ return localStorage.getItem(LS_NOTES) || ''; }
+  function saveNotes(text){ localStorage.setItem(LS_NOTES, text || ''); }
+
+  function renderTasks(){
+    const tasks = loadTasks();
+    tasksList.innerHTML = '';
+    tasks.forEach(t => {
+      const el = document.createElement('div');
+      el.className = 'task' + (t.completed ? ' done' : '');
+      el.innerHTML = `
+        <input type="checkbox" ${t.completed ? 'checked' : ''} data-id="${t.id}">
+        <div style="flex:1">
+          <div class="title">${escapeHtml(t.title)} <span style="font-weight:400;color:#9aa7b7;font-size:13px">(${t.priority})</span></div>
+          <div class="small">${escapeHtml(t.notes || '')}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button data-action="delete" data-id="${t.id}" style="background:transparent;border:1px solid #eee;padding:6px;border-radius:6px;cursor:pointer">Delete</button>
+        </div>
+      `;
+      tasksList.appendChild(el);
+    });
+    countEl.textContent = tasks.length;
+  }
+
+  function escapeHtml(str){ return String(str||'').replace(/[&<>"']/g, s=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[s])); }
+
+  taskForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const title = taskTitle.value.trim(); if(!title) return;
+    const newTask = { id: uid(), title, notes: taskNotes.value.trim(), priority: taskPriority.value, completed: false, createdAt: Date.now() };
+    const tasks = loadTasks();
+    tasks.unshift(newTask);
+    saveTasks(tasks);
+    taskForm.reset();
+  });
+
+  tasksList.addEventListener('change', (e) => {
+    if(e.target.type === 'checkbox'){
+      const id = e.target.dataset.id;
+      const tasks = loadTasks();
+      const t = tasks.find(x => x.id === id);
+      if(t){ t.completed = e.target.checked; saveTasks(tasks); }
+    }
+  });
+
+  tasksList.addEventListener('click', (e) => {
+    const del = e.target.closest('button[data-action="delete"]');
+    if(del){
+      const id = del.dataset.id;
+      let tasks = loadTasks();
+      tasks = tasks.filter(t=>t.id !== id);
+      saveTasks(tasks);
+    }
+  });
+
+  clearAllBtn.addEventListener('click', () => {
+    if(confirm('Clear all tasks? This cannot be undone.')){ localStorage.removeItem(LS_TASKS); renderTasks(); }
+  });
+
+  // notes
+  saveNotesBtn.addEventListener('click', () => { saveNotes(quickNotes.value); alert('Notes saved locally'); });
+  clearNotesBtn.addEventListener('click', () => { if(confirm('Clear notes?')){ quickNotes.value=''; saveNotes(''); } });
+
+  // init
+  quickNotes.value = loadNotes();
+  renderTasks();
+})();
+</script>
+</body>
+</html>
